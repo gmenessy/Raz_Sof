@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatTitle = document.getElementById('chat-title');
 
     let currentChatDocId = null;
+    let pollInterval = null;
 
     function log(message) {
         const div = document.createElement('div');
@@ -26,8 +27,33 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/akten');
             const data = await res.json();
             renderNodes(data);
+            checkPendingAnalysis(data);
         } catch (e) {
             log('Error loading Akten: ' + e.message);
+        }
+    }
+
+    function checkPendingAnalysis(akten) {
+        let isPending = false;
+        akten.forEach(akte => {
+            akte.dokumente.forEach(doc => {
+                if (!doc.essenz || !doc.index_data) {
+                    isPending = true;
+                }
+            });
+        });
+
+        if (isPending) {
+            if (!pollInterval) {
+                log('Knoten in Analyse... überwache Status.');
+                pollInterval = setInterval(loadAkten, 3000);
+            }
+        } else {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+                log('Alle Analysen abgeschlossen.');
+            }
         }
     }
 
@@ -40,8 +66,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const card = document.createElement('div');
                 card.className = 'raz-card';
 
-                let indexSnippet = doc.index_data ? doc.index_data.substring(0, 100) + '...' : 'Warte auf Analyse...';
-                let essenzSnippet = doc.essenz ? doc.essenz : 'Warte auf Analyse...';
+                const isAnalyzing = (!doc.essenz || !doc.index_data);
+
+                let indexSnippet = doc.index_data ? doc.index_data.substring(0, 100) + '...' : '<span class="blink" style="color: var(--inf-cyan);">Wird analysiert...</span>';
+                let essenzSnippet = doc.essenz ? doc.essenz : '<span class="blink" style="color: var(--inf-cyan);">Wird analysiert...</span>';
+
+                const buttonHtml = isAnalyzing ?
+                    `<button class="raz-action-btn" disabled style="opacity: 0.5;">Analysiere Knoten...</button>` :
+                    `<button class="raz-action-btn chat-trigger" data-id="${doc.id}" data-name="${doc.dateiname}">Enthüllen (Chat)</button>`;
 
                 card.innerHTML = `
                     <div class="raz-glow"></div>
@@ -50,9 +82,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="raz-excerpt"><strong>Essenz:</strong><br>${essenzSnippet}</div>
                     <div class="raz-excerpt" style="border-left-color: var(--inf-cyan);"><strong>Index:</strong><br>${indexSnippet}</div>
                     <div style="margin-top: 15px;">
-                        <button class="raz-action-btn chat-trigger" data-id="${doc.id}" data-name="${doc.dateiname}">Enthüllen (Chat)</button>
+                        ${buttonHtml}
                     </div>
                 `;
+
+                if(isAnalyzing) {
+                    card.style.borderColor = 'var(--inf-cyan)';
+                    card.style.boxShadow = '0 0 10px rgba(0, 245, 255, 0.2)';
+                }
+
                 nodesContainer.appendChild(card);
             });
         });
@@ -77,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('akte_id', 1); // MVP: Default Akte
 
         log(`Initiiere Ingest für: ${file.name}...`);
-        uploadBtn.textContent = 'Analysiere...';
+        uploadBtn.textContent = 'Upload läuft...';
         uploadBtn.disabled = true;
 
         try {
@@ -87,10 +125,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (res.ok) {
-                log(`Analyse abgeschlossen. Knoten integriert.`);
-                loadAkten();
+                log(`Dokument hochgeladen. Analyse startet im Hintergrund.`);
+                loadAkten(); // This will trigger polling since essenz is null
             } else {
-                log(`Fehler bei der Analyse: ${res.statusText}`);
+                log(`Fehler beim Upload: ${res.statusText}`);
             }
         } catch (e) {
             log(`Netzwerkfehler: ${e.message}`);

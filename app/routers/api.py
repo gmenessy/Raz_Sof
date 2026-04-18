@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List
 
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models.models import Dokument, Akte, Mandant
 from app.services.llm import generate_essenz, generate_index, chat_with_document
+import asyncio
 
 router = APIRouter(prefix="/api")
 
@@ -22,8 +23,30 @@ class DokumentResponse(BaseModel):
     class Config:
         from_attributes = True
 
+async def analyze_document_task(dokument_id: int, text_content: str):
+    """Background task to analyze the document using LLM"""
+    # Use a new DB session for the background task
+    db = SessionLocal()
+    try:
+        # LLM Calls
+        essenz = await generate_essenz(text_content[:10000])
+        index_data = await generate_index(text_content[:10000])
+
+        # Update Database
+        dok = db.query(Dokument).filter(Dokument.id == dokument_id).first()
+        if dok:
+            dok.essenz = essenz
+            dok.index_data = index_data
+            db.commit()
+    except Exception as e:
+        print(f"Error in background task: {e}")
+    finally:
+        db.close()
+
+
 @router.post("/upload", response_model=DokumentResponse)
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     akte_id: int = Form(...),
     db: Session = Depends(get_db)
@@ -35,20 +58,20 @@ async def upload_document(
     content = await file.read()
     text = content.decode("utf-8", errors="ignore")
 
-    # Analyze with LLM
-    essenz = generate_essenz(text[:10000]) # simple limit to avoid huge payload in MVP
-    index_data = generate_index(text[:10000])
-
+    # Save the document immediately with empty essenz/index
     dok = Dokument(
         dateiname=file.filename,
         inhalt=text,
-        essenz=essenz,
-        index_data=index_data,
+        essenz=None,
+        index_data=None,
         akte_id=akte.id
     )
     db.add(dok)
     db.commit()
     db.refresh(dok)
+
+    # Queue background processing
+    background_tasks.add_task(analyze_document_task, dok.id, text)
 
     return dok
 
@@ -67,12 +90,12 @@ def get_akten(db: Session = Depends(get_db)):
     return result
 
 @router.post("/chat")
-def chat(request: ChatRequest, db: Session = Depends(get_db)):
+async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     dok = db.query(Dokument).filter(Dokument.id == request.dokument_id).first()
     if not dok:
         raise HTTPException(status_code=404, detail="Dokument nicht gefunden")
 
-    response_text = chat_with_document(
+    response_text = await chat_with_document(
         document_text=dok.inhalt[:10000],
         essenz=dok.essenz or "",
         user_query=request.message
