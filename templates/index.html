@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raz_Sof: Hidden Knowledge. Infinite Action.</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono&family=Michroma&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="raz-canvas">
+        <svg class="raz-connections" id="connections-svg">
+            <!-- Dynamically drawn paths will go here -->
+        </svg>
+
+        <header class="raz-header-main">
+            <h1>RAZ_SOF</h1>
+            <p class="subtitle">Hidden Knowledge. Infinite Action.</p>
+        </header>
+
+        <div class="main-container">
+            <aside class="sidebar">
+                <div class="upload-section">
+                    <h3>Neues Dokument laden</h3>
+                    <input type="file" id="file-upload" class="raz-input" />
+                    <button id="upload-btn" class="raz-action-btn">Analysieren</button>
+                    <div id="upload-status" class="raz-meta"></div>
+                </div>
+
+                <div class="agent-console">
+                    <h3>Agent Console</h3>
+                    <div id="console-logs" class="logs">
+                        <div>[SYSTEM] Initializing Raz_Sof Matrix...</div>
+                        <div>[SYSTEM] Awaiting input.</div>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="nodes-container" id="nodes-container">
+                <!-- Document Cards will be loaded here -->
+            </main>
+        </div>
+
+        <!-- Chat Modal -->
+        <div id="chat-modal" class="modal hidden">
+            <div class="modal-content raz-card">
+                <span class="close-btn">&times;</span>
+                <h3 id="chat-title" class="raz-title">Chat</h3>
+                <div class="chat-history" id="chat-history"></div>
+                <div class="chat-input-area">
+                    <input type="text" id="chat-input" class="raz-input" placeholder="Frage an den Agenten..." />
+                    <button id="chat-send" class="raz-action-btn">Senden</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
