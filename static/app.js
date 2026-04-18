@@ -95,7 +95,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // Attach chat listeners
         document.querySelectorAll('.chat-trigger').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 openChat(e.target.dataset.id, e.target.dataset.name);
@@ -112,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const file = fileInput.files[0];
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('akte_id', 1); // MVP: Default Akte
+        formData.append('akte_id', 1);
 
         log(`Initiiere Ingest für: ${file.name}...`);
         uploadBtn.textContent = 'Upload läuft...';
@@ -126,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (res.ok) {
                 log(`Dokument hochgeladen. Analyse startet im Hintergrund.`);
-                loadAkten(); // This will trigger polling since essenz is null
+                loadAkten();
             } else {
                 log(`Fehler beim Upload: ${res.statusText}`);
             }
@@ -139,7 +138,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Chat Logic
     function openChat(docId, docName) {
         currentChatDocId = docId;
         chatTitle.textContent = `Raz_Sof Link > ${docName}`;
@@ -156,14 +154,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const msg = chatInput.value.trim();
         if (!msg || !currentChatDocId) return;
 
-        // Add user msg
         chatHistory.innerHTML += `<div class="chat-msg user">${msg}</div>`;
         chatInput.value = '';
         chatHistory.scrollTop = chatHistory.scrollHeight;
 
-        // Add loading state
-        const loadingId = 'loading-' + Date.now();
-        chatHistory.innerHTML += `<div id="${loadingId}" class="chat-msg agent blink">RAZ_SOF extrahiert Pfade...</div>`;
+        const responseId = 'resp-' + Date.now();
+        chatHistory.innerHTML += `<div id="${responseId}" class="chat-msg agent"><span class="blink">RAZ_SOF extrahiert Pfade...</span></div>`;
         chatHistory.scrollTop = chatHistory.scrollHeight;
 
         log(`Sende Query an Knoten_${currentChatDocId.toString().padStart(3, '0')}`);
@@ -178,18 +174,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
             });
 
-            document.getElementById(loadingId).remove();
+            const responseContainer = document.getElementById(responseId);
+            responseContainer.innerHTML = 'RAZ_SOF: ';
 
             if (res.ok) {
-                const data = await res.json();
-                chatHistory.innerHTML += `<div class="chat-msg agent">RAZ_SOF: ${data.response}</div>`;
-                log(`Antwort empfangen.`);
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let done = false;
+
+                while (!done) {
+                    const { value, done: readerDone } = await reader.read();
+                    done = readerDone;
+                    if (value) {
+                        const chunk = decoder.decode(value, { stream: true });
+                        // Render line breaks correctly for HTML
+                        responseContainer.innerHTML += chunk.replace(/\n/g, '<br>');
+                        chatHistory.scrollTop = chatHistory.scrollHeight;
+                    }
+                }
+                log(`Antwortstrom beendet.`);
             } else {
-                chatHistory.innerHTML += `<div class="chat-msg agent" style="color: red;">RAZ_SOF ERROR: ${res.statusText}</div>`;
+                responseContainer.innerHTML = `<span style="color: red;">RAZ_SOF ERROR: ${res.statusText}</span>`;
             }
         } catch (e) {
-            document.getElementById(loadingId).remove();
-            chatHistory.innerHTML += `<div class="chat-msg agent" style="color: red;">RAZ_SOF OFFLINE: ${e.message}</div>`;
+            const responseContainer = document.getElementById(responseId);
+            if(responseContainer) {
+                responseContainer.innerHTML = `<span style="color: red;">RAZ_SOF OFFLINE: ${e.message}</span>`;
+            }
         }
 
         chatHistory.scrollTop = chatHistory.scrollHeight;
@@ -200,6 +211,5 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') sendChatMessage();
     });
 
-    // Initial Load
     loadAkten();
 });

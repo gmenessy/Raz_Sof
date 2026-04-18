@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List
 
 from app.database import get_db, SessionLocal
 from app.models.models import Dokument, Akte, Mandant
-from app.services.llm import generate_essenz, generate_index, chat_with_document
+from app.services.llm import generate_essenz, generate_index, chat_with_document_stream
 import asyncio
 
 router = APIRouter(prefix="/api")
@@ -25,14 +26,11 @@ class DokumentResponse(BaseModel):
 
 async def analyze_document_task(dokument_id: int, text_content: str):
     """Background task to analyze the document using LLM"""
-    # Use a new DB session for the background task
     db = SessionLocal()
     try:
-        # LLM Calls
         essenz = await generate_essenz(text_content[:10000])
         index_data = await generate_index(text_content[:10000])
 
-        # Update Database
         dok = db.query(Dokument).filter(Dokument.id == dokument_id).first()
         if dok:
             dok.essenz = essenz
@@ -58,7 +56,6 @@ async def upload_document(
     content = await file.read()
     text = content.decode("utf-8", errors="ignore")
 
-    # Save the document immediately with empty essenz/index
     dok = Dokument(
         dateiname=file.filename,
         inhalt=text,
@@ -70,7 +67,6 @@ async def upload_document(
     db.commit()
     db.refresh(dok)
 
-    # Queue background processing
     background_tasks.add_task(analyze_document_task, dok.id, text)
 
     return dok
@@ -95,10 +91,12 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     if not dok:
         raise HTTPException(status_code=404, detail="Dokument nicht gefunden")
 
-    response_text = await chat_with_document(
-        document_text=dok.inhalt[:10000],
-        essenz=dok.essenz or "",
-        user_query=request.message
-    )
+    async def event_generator():
+        async for chunk in chat_with_document_stream(
+            document_text=dok.inhalt[:10000],
+            essenz=dok.essenz or "",
+            user_query=request.message
+        ):
+            yield chunk
 
-    return {"response": response_text}
+    return StreamingResponse(event_generator(), media_type="text/plain")
