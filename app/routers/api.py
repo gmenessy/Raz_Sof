@@ -3,19 +3,25 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 import io
 import PyPDF2
 
 from app.database import get_db, SessionLocal
 from app.models.models import Dokument, Akte, Mandant, DokumentChunk
-from app.services.llm import generate_essenz, generate_index, chat_with_document_stream
+from app.services.llm import generate_essenz, generate_index, chat_with_document_stream, discover_relevant_skills
 from app.services.rag import chunk_text, get_embeddings
+from app.services.skills import get_all_skills, get_skill_by_id
 import asyncio
 
 router = APIRouter(prefix="/api")
 
 class ChatRequest(BaseModel):
+    dokument_id: int
+    message: str
+    skill_id: Optional[str] = None
+
+class DiscoverRequest(BaseModel):
     dokument_id: int
     message: str
 
@@ -32,7 +38,6 @@ async def analyze_document_task(dokument_id: int, text_content: str):
     """Background task to analyze the document using LLM and create RAG chunks."""
     db = SessionLocal()
     try:
-        # 1. Generate Summaries (Essenz & Index)
         essenz = await generate_essenz(text_content[:10000])
         index_data = await generate_index(text_content[:10000])
 
@@ -41,12 +46,9 @@ async def analyze_document_task(dokument_id: int, text_content: str):
             dok.essenz = essenz
             dok.index_data = index_data
 
-            # 2. Process Vector Chunks for RAG
             chunks = chunk_text(text_content)
             if chunks:
                 embeddings = await get_embeddings(chunks)
-
-                # Verify we got valid embeddings back
                 if embeddings and len(embeddings) == len(chunks):
                     for idx, chunk_text_str in enumerate(chunks):
                         db_chunk = DokumentChunk(
@@ -55,7 +57,6 @@ async def analyze_document_task(dokument_id: int, text_content: str):
                             embedding=embeddings[idx]
                         )
                         db.add(db_chunk)
-
             db.commit()
     except Exception as e:
         print(f"Error in background task: {e}")
@@ -120,11 +121,40 @@ def get_akten(db: Session = Depends(get_db)):
         })
     return result
 
+@router.get("/skills")
+def get_skills():
+    """Returns the list of all available analytical skills."""
+    return get_all_skills()
+
+@router.post("/chat/discover_skills")
+async def discover_skills(request: DiscoverRequest, db: Session = Depends(get_db)):
+    """Suggests top skills based on document essence and user query."""
+    dok = db.query(Dokument).filter(Dokument.id == request.dokument_id).first()
+    if not dok:
+        raise HTTPException(status_code=404, detail="Dokument nicht gefunden")
+
+    if not dok.essenz:
+        return {"suggested_skills": []} # Still analyzing
+
+    all_skills = get_all_skills()
+    suggested_ids = await discover_relevant_skills(dok.essenz, request.message, all_skills)
+
+    # Return full skill objects for the suggested IDs
+    suggested_objects = [s for s in all_skills if s["id"] in suggested_ids]
+    return {"suggested_skills": suggested_objects}
+
 @router.post("/chat")
 async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     dok = db.query(Dokument).filter(Dokument.id == request.dokument_id).first()
     if not dok:
         raise HTTPException(status_code=404, detail="Dokument nicht gefunden")
+
+    # Get skill prompt if a skill was selected
+    skill_prompt = None
+    if request.skill_id:
+        skill = get_skill_by_id(request.skill_id)
+        if skill:
+            skill_prompt = skill["prompt"]
 
     # Attempt to do vector search to find relevant context instead of just reading first 10k chars
     relevant_context = ""
@@ -154,7 +184,8 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         async for chunk in chat_with_document_stream(
             document_text=relevant_context,
             essenz=dok.essenz or "",
-            user_query=request.message
+            user_query=request.message,
+            skill_prompt=skill_prompt
         ):
             yield chunk
 

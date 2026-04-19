@@ -12,6 +12,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatHistory = document.getElementById('chat-history');
     const chatTitle = document.getElementById('chat-title');
 
+    // Skill Control Elements
+    const skillSelect = document.getElementById('skill-select');
+    const discoverSkillsBtn = document.getElementById('discover-skills-btn');
+
     let currentChatDocId = null;
     let pollInterval = null;
 
@@ -20,6 +24,22 @@ document.addEventListener('DOMContentLoaded', () => {
         div.textContent = `> ${message}`;
         consoleLogs.appendChild(div);
         consoleLogs.scrollTop = consoleLogs.scrollHeight;
+    }
+
+    async function loadSkills() {
+        try {
+            const res = await fetch('/api/skills');
+            const skills = await res.json();
+
+            skills.forEach(skill => {
+                const opt = document.createElement('option');
+                opt.value = skill.id;
+                opt.textContent = `[${skill.category}] ${skill.name} - ${skill.ziel}`;
+                skillSelect.appendChild(opt);
+            });
+        } catch (e) {
+            log('Error loading skills: ' + e.message);
+        }
     }
 
     async function loadAkten() {
@@ -143,13 +163,53 @@ document.addEventListener('DOMContentLoaded', () => {
     function openChat(docId, docName) {
         currentChatDocId = docId;
         chatTitle.innerHTML = `Raz_Sof <span style="color: var(--highlight); font-weight: 300;">// ${docName}</span>`;
-        chatHistory.innerHTML = '<div class="chat-msg agent">System: Agentischer Kanal geöffnet. Was möchten Sie wissen?</div>';
+        chatHistory.innerHTML = '<div class="chat-msg agent">System: Agentischer Kanal geöffnet. Was möchten Sie wissen? (Wähle optional einen Skill)</div>';
+        skillSelect.value = ""; // Reset skill
         chatModal.classList.add('active');
     }
 
     closeBtn.addEventListener('click', () => {
         chatModal.classList.remove('active');
         currentChatDocId = null;
+    });
+
+    discoverSkillsBtn.addEventListener('click', async () => {
+        if (!currentChatDocId) return;
+
+        const msg = chatInput.value.trim() || "Was ist der generelle Kontext dieses Dokuments?";
+
+        discoverSkillsBtn.disabled = true;
+        discoverSkillsBtn.innerHTML = '<span class="blink">Analysiere...</span>';
+
+        try {
+            const res = await fetch('/api/chat/discover_skills', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dokument_id: parseInt(currentChatDocId),
+                    message: msg
+                })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                if (data.suggested_skills && data.suggested_skills.length > 0) {
+                    const topSkill = data.suggested_skills[0];
+                    skillSelect.value = topSkill.id;
+                    log(`Skill-Empfehlung: ${topSkill.name}`);
+
+                    chatHistory.innerHTML += `<div class="chat-msg agent">System: Basierend auf Dokument und Anfrage empfehle ich den Skill <strong>${topSkill.name}</strong>. Ich habe ihn für dich ausgewählt.</div>`;
+                    chatHistory.scrollTop = chatHistory.scrollHeight;
+                } else {
+                    log("Keine spezifischen Skills empfohlen.");
+                }
+            }
+        } catch (e) {
+            log("Fehler bei Skill-Discovery: " + e.message);
+        } finally {
+            discoverSkillsBtn.disabled = false;
+            discoverSkillsBtn.innerHTML = '✨ Auto-Discover Skills';
+        }
     });
 
     async function sendChatMessage() {
@@ -161,8 +221,10 @@ document.addEventListener('DOMContentLoaded', () => {
         chatHistory.scrollTop = chatHistory.scrollHeight;
 
         const responseId = 'resp-' + Date.now();
-        chatHistory.innerHTML += `<div id="${responseId}" class="chat-msg agent"><span class="blink">Verarbeite (RAG)...</span></div>`;
+        chatHistory.innerHTML += `<div id="${responseId}" class="chat-msg agent"><span class="blink">Verarbeite (RAG + Skill)...</span></div>`;
         chatHistory.scrollTop = chatHistory.scrollHeight;
+
+        const selectedSkillId = skillSelect.value;
 
         try {
             const res = await fetch('/api/chat', {
@@ -170,7 +232,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     dokument_id: parseInt(currentChatDocId),
-                    message: msg
+                    message: msg,
+                    skill_id: selectedSkillId || null
                 })
             });
 
@@ -209,5 +272,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') sendChatMessage();
     });
 
+    loadSkills();
     loadAkten();
 });

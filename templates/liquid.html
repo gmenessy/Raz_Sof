@@ -58,7 +58,16 @@
         <div class="chat-modal liquid-glass">
             <div class="liquid-content" style="display: flex; flex-direction: column; height: 100%;">
                 <button class="close-modal" id="close-modal-btn">&times;</button>
-                <h2 id="chat-title" style="margin-top: 0; margin-bottom: 20px; font-weight: 600;">Chat</h2>
+                <h2 id="chat-title" style="margin-top: 0; margin-bottom: 10px; font-weight: 600;">Chat</h2>
+
+                <!-- Skill Controls -->
+                <div class="skill-controls" style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                    <select id="skill-select" class="liquid-input" style="flex: 1; padding: 8px; margin: 0; cursor: pointer;">
+                        <option value="">-- Standard Agent (Kein spezifischer Skill) --</option>
+                        <!-- Injected via JS -->
+                    </select>
+                    <button id="discover-skills-btn" class="liquid-btn-outline" style="padding: 8px 15px; font-size: 0.8rem; white-space: nowrap;">✨ Auto-Discover Skills</button>
+                </div>
 
                 <div class="chat-history" id="chat-history"></div>
 

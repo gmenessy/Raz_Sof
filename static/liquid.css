@@ -346,3 +346,33 @@ body, html {
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(0, 242, 254, 0.5);
 }
+
+/* Additional styles for Skill Controls */
+.liquid-btn-outline {
+    background: transparent;
+    border: 1px solid var(--highlight);
+    color: var(--highlight);
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.liquid-btn-outline:hover {
+    background: rgba(0, 242, 254, 0.1);
+    box-shadow: 0 4px 15px rgba(0, 242, 254, 0.2);
+}
+
+.liquid-btn-outline:disabled {
+    border-color: rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.4);
+    cursor: not-allowed;
+    box-shadow: none;
+    background: transparent;
+}
+
+select.liquid-input option {
+    background: var(--canvas);
+    color: var(--text-color);
+}

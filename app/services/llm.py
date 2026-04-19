@@ -1,6 +1,7 @@
 import os
 import httpx
 import json
+import re
 from typing import AsyncGenerator
 from dotenv import load_dotenv
 
@@ -13,15 +14,16 @@ HTTP_PROXY = os.getenv("HTTP_PROXY", os.getenv("http_proxy", ""))
 HTTPS_PROXY = os.getenv("HTTPS_PROXY", os.getenv("https_proxy", ""))
 
 def _get_proxy():
-    # httpx >= 0.28.0 uses 'proxy' not 'proxies'
     if HTTPS_PROXY:
         return HTTPS_PROXY
     if HTTP_PROXY:
         return HTTP_PROXY
     return None
 
-async def _call_llm(messages: list, max_tokens: int = 1500) -> str:
+async def _call_llm(messages: list, max_tokens: int = 1500, temperature: float = 0.2) -> str:
     if not OPENAI_API_KEY:
+        if "JSON-Array" in messages[0]["content"]:
+             return '["advocatus_diaboli", "anforderungs_analyse", "kosten_detektiv"]'
         return "MOCK_LLM_RESPONSE: " + messages[-1]["content"][:100] + "..."
 
     headers = {
@@ -32,7 +34,7 @@ async def _call_llm(messages: list, max_tokens: int = 1500) -> str:
         "model": DEFAULT_MODEL,
         "messages": messages,
         "max_tokens": max_tokens,
-        "temperature": 0.2
+        "temperature": temperature
     }
 
     client_args = {"timeout": 30.0}
@@ -114,10 +116,54 @@ async def generate_index(text: str) -> str:
     ]
     return await _call_llm(messages)
 
-async def chat_with_document_stream(document_text: str, essenz: str, user_query: str) -> AsyncGenerator[str, None]:
+async def chat_with_document_stream(document_text: str, essenz: str, user_query: str, skill_prompt: str = None) -> AsyncGenerator[str, None]:
+    base_sys_prompt = "Du bist Raz_Sof, ein agentischer Assistent für die Analyse von Dokumenten. Du bist präzise, professionell und analytisch."
+
+    if skill_prompt:
+        base_sys_prompt += f"\n\nWENDE FOLGENDEN SKILL AN:\n{skill_prompt}"
+
     messages = [
-        {"role": "system", "content": f"Du bist Raz_Sof, ein agentischer Assistent für die Analyse von Dokumenten. Du bist präzise, professionell und analytisch.\n\nKontext des Dokuments (Essenz):\n{essenz}\n\nVollständiger Text:\n{document_text}\n\nBeantworte die Fragen des Nutzers basierend auf diesem Dokument."},
+        {"role": "system", "content": f"{base_sys_prompt}\n\nKontext des Dokuments (Essenz):\n{essenz}\n\nVollständiger Text (bzw. relevante Chunks):\n{document_text}\n\nBeantworte die Fragen des Nutzers basierend auf diesem Dokument und der Skill-Anweisung."},
         {"role": "user", "content": user_query}
     ]
     async for chunk in _call_llm_stream(messages):
         yield chunk
+
+async def discover_relevant_skills(essenz: str, query: str, available_skills: list) -> list:
+    """Uses the LLM to suggest the top 3 skill IDs based on the document summary and user query."""
+
+    skills_json = json.dumps([{"id": s["id"], "name": s["name"], "ziel": s["ziel"]} for s in available_skills], ensure_ascii=False)
+
+    sys_prompt = f"""Du bist ein Router-Agent für Raz_Sof. Deine Aufgabe ist es, basierend auf dem Kontext des Dokuments und der Nutzeranfrage die 3 passendsten Analyse-Skills auszuwählen.
+
+Hier ist die Liste der verfügbaren Skills (als JSON):
+{skills_json}
+
+Antworte AUSSCHLIESSLICH mit einem JSON-Array, das die 3 besten Skill-IDs als Strings enthält. Beispiel: ["advocatus_diaboli", "prozess_chirurg", "echo_filter"]
+Kein Markdown, kein Text davor oder danach."""
+
+    user_prompt = f"Dokumenten-Essenz:\n{essenz}\n\nNutzer-Anfrage:\n{query}"
+
+    messages = [
+        {"role": "system", "content": sys_prompt},
+        {"role": "user", "content": user_prompt}
+    ]
+
+    try:
+        response_text = await _call_llm(messages, max_tokens=100, temperature=0.0)
+        # Parse the JSON array
+        # Clean potential markdown formatting if the model disobeys
+
+        # Use regex to find the first array structure in case there's text around it
+        match = re.search(r'\[.*\]', response_text.replace('\n', ' '))
+        if match:
+            response_text = match.group(0)
+
+        skill_ids = json.loads(response_text)
+        if isinstance(skill_ids, list):
+            return [s for s in skill_ids if isinstance(s, str)][:3]
+        return []
+    except Exception as e:
+        print(f"Error discovering skills: {e}")
+        # Fallback to default skills if parsing fails or offline
+        return ["advocatus_diaboli", "anforderungs_analyse", "kosten_detektiv"]
