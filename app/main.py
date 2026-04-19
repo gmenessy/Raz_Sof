@@ -19,3 +19,7 @@ app.include_router(api.router)
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend(request: Request):
     return templates.TemplateResponse(request=request, name="index.html")
+
+@app.get("/fancy", response_class=HTMLResponse)
+async def serve_liquid_frontend(request: Request):
+    return templates.TemplateResponse(request=request, name="liquid.html")

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raz_Sof: Fluid Knowledge</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/liquid.css">
+</head>
+<body>
+    <!-- Moving Mesh Gradient Background -->
+    <div class="mesh-bg">
+        <div class="mesh-orb-1"></div>
+        <div class="mesh-orb-2"></div>
+        <div class="mesh-orb-3"></div>
+    </div>
+
+    <div class="app-container">
+
+        <!-- Sidebar -->
+        <aside class="sidebar liquid-glass">
+            <div class="liquid-content">
+                <div class="header" style="margin-bottom: 30px;">
+                    <h1>RAZ_SOF</h1>
+                    <p>Fluid Agentic Intelligence</p>
+                </div>
+
+                <div style="margin-bottom: 30px;">
+                    <h3 style="margin-bottom: 15px; font-weight: 600;">Neues Dokument</h3>
+                    <input type="file" id="file-upload" class="liquid-input" style="margin-bottom: 15px;" />
+                    <button id="upload-btn" class="liquid-btn">Analysieren</button>
+                </div>
+
+                <div>
+                    <h3 style="margin-bottom: 15px; font-weight: 600;">System Log</h3>
+                    <div id="console-logs" style="font-size: 0.8rem; color: rgba(241,245,249,0.7); max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                        <div>[Init] Liquid Engine ready.</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <div class="header" style="margin-bottom: 20px;">
+                <h2>Aktive Akten & Knoten</h2>
+            </div>
+
+            <div class="nodes-grid" id="nodes-container">
+                <!-- Cards injected via JS -->
+            </div>
+        </main>
+
+    </div>
+
+    <!-- Chat Modal -->
+    <div class="modal-overlay" id="chat-modal">
+        <div class="chat-modal liquid-glass">
+            <div class="liquid-content" style="display: flex; flex-direction: column; height: 100%;">
+                <button class="close-modal" id="close-modal-btn">&times;</button>
+                <h2 id="chat-title" style="margin-top: 0; margin-bottom: 20px; font-weight: 600;">Chat</h2>
+
+                <div class="chat-history" id="chat-history"></div>
+
+                <div class="chat-input-row">
+                    <input type="text" id="chat-input" class="liquid-input" placeholder="Frage an den Agenten..." />
+                    <button id="chat-send" class="liquid-btn" style="width: auto; padding: 12px 30px;">Senden</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/liquid.js"></script>
+</body>
+</html>
