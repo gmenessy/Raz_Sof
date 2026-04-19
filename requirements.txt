@@ -9,3 +9,6 @@ pydantic-settings
 python-dotenv
 httpx
 psycopg2-binary
+pgvector
+PyPDF2
+tiktoken

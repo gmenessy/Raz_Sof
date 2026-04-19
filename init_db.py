@@ -1,7 +1,14 @@
+from sqlalchemy import text
 from app.database import engine, Base, SessionLocal
 from app.models.models import Mandant, Nutzer, Akte
 
 def init_db():
+    # If using postgres, ensure vector extension is enabled
+    if engine.url.drivername in ['postgres', 'postgresql', 'postgresql+psycopg2']:
+        with engine.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.commit()
+
     Base.metadata.create_all(bind=engine)
 
     db = SessionLocal()

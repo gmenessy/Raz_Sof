@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
+from pgvector.sqlalchemy import Vector
 
 class Mandant(Base):
     __tablename__ = "mandanten"
@@ -44,3 +45,14 @@ class Dokument(Base):
     hochgeladen_am = Column(DateTime, default=datetime.utcnow)
 
     akte = relationship("Akte", back_populates="dokumente")
+    chunks = relationship("DokumentChunk", back_populates="dokument")
+
+class DokumentChunk(Base):
+    __tablename__ = "dokument_chunks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    dokument_id = Column(Integer, ForeignKey("dokumente.id"))
+    text_content = Column(Text)
+    embedding = Column(Vector(1536)) # Default OpenAI text-embedding-ada-002 size
+
+    dokument = relationship("Dokument", back_populates="chunks")
